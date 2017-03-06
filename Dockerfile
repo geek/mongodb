@@ -1,4 +1,4 @@
-FROM mongo:3.2
+FROM mongo:3.4
 
 RUN apt-get update \
 	&& apt-get install -y \
@@ -20,9 +20,9 @@ RUN curl -Ls -o get-pip.py https://bootstrap.pypa.io/get-pip.py && \
 		mock==2.0.0
 
 # Add ContainerPilot and set its configuration file path
-ENV CONTAINERPILOT_VER 2.0.1
+ENV CONTAINERPILOT_VER 2.6.0
 ENV CONTAINERPILOT file:///etc/containerpilot.json
-RUN export CONTAINERPILOT_CHECKSUM=a4dd6bc001c82210b5c33ec2aa82d7ce83245154 \
+RUN export CONTAINERPILOT_CHECKSUM=c1bcd137fadd26ca2998eec192d04c08f62beb1f \
 	&& curl -Lso /tmp/containerpilot.tar.gz \
 		"https://github.com/joyent/containerpilot/releases/download/${CONTAINERPILOT_VER}/containerpilot-${CONTAINERPILOT_VER}.tar.gz" \
 	&& echo "${CONTAINERPILOT_CHECKSUM}  /tmp/containerpilot.tar.gz" | sha1sum -c \
@@ -46,4 +46,3 @@ CMD [ \
 	"mongod", \
 	"--replSet=joyent" \
 ]
-
