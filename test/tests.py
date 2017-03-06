@@ -21,19 +21,19 @@ class MongodbStackTest(AutopilotPatternTest):
     project_name = 'mongodb'
 
     def setUp(self):
+        self.db = 'mytestdb'
+
         """
         autopilotpattern/mongodb setup.sh writes an _env file with a CNS
         entry and account info for Manta. If this has been mounted from
         the test environment, we'll use that, otherwise we have to
         generate it from the environment.
         """
+
         if not os.path.isfile('_env'):
             print('generating _env')
-            with open(os.environ['DOCKER_CERT_PATH'] + '/key.pem') as key_file:
-                manta_key = '#'.join([line.strip() for line in key_file])
-            os.environ['MANTA_PRIVATE_KEY'] = manta_key
+            self.consul = 'consul'
 
-            dump_environment_to_file('_env')
 
     def test_replication_and_failover(self):
         """

@@ -23,6 +23,7 @@ help:
 # Target environment configuration
 
 dockerLocal := DOCKER_HOST= DOCKER_TLS_VERIFY= DOCKER_CERT_PATH= docker
+dockerComposeLocal := DOCKER_HOST= DOCKER_TLS_VERIFY= DOCKER_CERT_PATH= docker-compose
 
 # if you pass `TRACE=1` into the call to `make` then the Python tests will
 # run under the `trace` module (provides detailed call logging)
@@ -31,6 +32,7 @@ python := python
 else
 python := python -m trace
 endif
+
 
 # ------------------------------------------------
 # Container builds
@@ -41,7 +43,7 @@ build: test-runner
 
 ## Build the test running container
 test-runner:
-	$(dockerLocal) build -f tests/Dockerfile -t=$(test_image):$(tag) .
+	$(dockerLocal) build -f test/Dockerfile -t=$(test_image):$(tag) .
 
 ## Push the current application container images to the Docker Hub
 push:
@@ -64,56 +66,16 @@ ship:
 pull:
 	docker pull $(image):$(tag)
 
-## Run the unit tests inside the mongodb container
-test:
-	$(dockerLocal) run --rm -w /usr/local/bin \
-		-e LOG_LEVEL=DEBUG \
-		$(image):$(tag) \
-		$(python) test.py
-
-## Run the unit tests with source mounted to the container for local dev
-test-src:
-	$(dockerLocal) run --rm  -w /usr/local/bin \
-		-v $(shell pwd)/bin/manager:/usr/local/bin/manager \
-		-v $(shell pwd)/bin/manage.py:/usr/local/bin/manage.py \
-		-v $(shell pwd)/bin/test.py:/usr/local/bin/test.py \
-		-e LOG_LEVEL=DEBUG \
-		$(image):$(tag) \
-		$(python) test.py
-
-$(DOCKER_CERT_PATH)/key.pub:
-	ssh-keygen -y -f $(DOCKER_CERT_PATH)/key.pem > $(DOCKER_CERT_PATH)/key.pub
-
-# For Jenkins test runner only: make sure we have public keys available
-SDC_KEYS_VOL ?= -v $(DOCKER_CERT_PATH):$(DOCKER_CERT_PATH)
-MANTA_KEY_ID ?= $(shell ssh-keygen -l -f $(DOCKER_CERT_PATH)/key.pub | awk '{print $$2}')
-keys: $(DOCKER_CERT_PATH)/key.pub
-
-## Run the integration test runner. Runs locally but targets Triton.
+## Run the integration test runner.
 integration-test:
-	$(call check_var, TRITON_ACCOUNT TRITON_DC, \
-		required to run integration tests on Triton.)
-	$(dockerLocal) run --rm \
-		-e TAG=$(tag) \
-		-e COMPOSE_HTTP_TIMEOUT=300 \
-		-e DOCKER_HOST=$(DOCKER_HOST) \
-		-e DOCKER_TLS_VERIFY=1 \
-		-e DOCKER_CERT_PATH=$(DOCKER_CERT_PATH) \
-		-e MANTA_KEY_ID=$(MANTA_KEY_ID) \
-		-e MANTA_URL=$(MANTA_URL) \
-		-e MANTA_USER=$(MANTA_USER) \
-		-e MANTA_SUBUSER=$(MANTA_SUBUSER) \
-		-e MANTA_ROLE=$(MANTA_ROLE) \
-		-e CONSUL=mongodb-consul.svc.$(TRITON_ACCOUNT).$(TRITON_DC).cns.joyent.com \
-		$(SDC_KEYS_VOL) -w /src \
-		$(test_image):$(tag) python3 tests.py
+	$(dockerComposeLocal) -f test-compose.yml up -d --force-recreate --build
+	$(dockerComposeLocal) -f test-compose.yml logs -f test
+
 
 # -------------------------------------------------------
-
 ## Tear down all project containers
 teardown:
-	docker-compose -p my stop
-	docker-compose -p my rm -f
+	$(dockerComposeLocal) -f test-compose.yml down
 
 ## Dump logs for each container to local disk
 logs:
@@ -121,47 +83,6 @@ logs:
 	docker logs my_mongodb_1 > mongodb1.log 2>&1
 	docker logs my_mongodb_2 > mongodb2.log 2>&1
 	docker logs my_mongodb_3 > mongodb3.log 2>&1
-
-# -------------------------------------------------------
-
-MANTA_URL ?= https://us-east.manta.joyent.com
-MANTA_USER ?= triton_mongodb
-MANTA_SUBUSER ?= triton_mongodb
-MANTA_LOGIN ?= triton_mongodb
-MANTA_ROLE ?= triton_mongodb
-MANTA_POLICY ?= triton_mongodb
-
-## Create user and policies for Manta backups
-manta:
-	# you need to have your SDC_ACCOUNT set
-	# usage:
-	# make manta EMAIL=example@example.com PASSWORD=strongpassword
-	$(call check_var, EMAIL PASSWORD SDC_ACCOUNT, \
-		Required to create a Manta login.)
-
-	ssh-keygen -t rsa -b 4096 -C "${EMAIL}" -f manta
-	sdc-user create --login=${MANTA_LOGIN} --password=${PASSWORD} --email=${EMAIL}
-	sdc-user upload-key $(ssh-keygen -E md5 -lf ./manta | awk -F' ' '{gsub("MD5:","");{print $2}}') --name=${MANTA_LOGIN}-key ${MANTA_LOGIN} ./manta.pub
-	sdc-policy create --name=${MANTA_POLICY} \
-		--rules='CAN getobject' \
-		--rules='CAN putobject' \
-		--rules='CAN putmetadata' \
-		--rules='CAN putsnaplink' \
-		--rules='CAN getdirectory' \
-		--rules='CAN putdirectory'
-	sdc-role create --name=${MANTA_ROLE} \
-		--policies=${MANTA_POLICY} \
-		--members=${MANTA_LOGIN}
-	mmkdir ${SDC_ACCOUNT}/stor/${MANTA_LOGIN}
-	mchmod -- +triton_mongodb /${SDC_ACCOUNT}/stor/${MANTA_LOGIN}
-
-## Cleans out Manta backups
-cleanup:
-	$(call check_var, SDC_ACCOUNT, Required to cleanup Manta.)
-	-mrm -r /${SDC_ACCOUNT}/stor/triton-mongodb/
-	mmkdir /${SDC_ACCOUNT}/stor/triton-mongodb
-	mchmod -- +triton_mongodb /${SDC_ACCOUNT}/stor/triton-mongodb
-
 
 # -------------------------------------------------------
 # helper functions for testing if variables are defined

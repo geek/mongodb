@@ -13,5 +13,5 @@ RUN pip3 install \
 # install tests
 COPY test/testing/testcases.py /src/testcases.py
 COPY test/tests.py /src/tests.py
-COPY docker-compose.yml /src/docker-compose.yml
+COPY local-compose.yml /src/docker-compose.yml
 COPY setup.sh /src/setup.sh
