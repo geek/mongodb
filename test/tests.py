@@ -32,8 +32,8 @@ class MongodbStackTest(AutopilotPatternTest):
 
         if not os.path.isfile('_env'):
             print('generating _env')
-            self.consul = 'consul'
-
+            os.environ['CONSUL'] = 'consul'
+            dump_environment_to_file('_env')
 
     def test_replication_and_failover(self):
         """
